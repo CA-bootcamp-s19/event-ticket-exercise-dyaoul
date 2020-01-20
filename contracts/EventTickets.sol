@@ -5,6 +5,7 @@ pragma solidity ^0.5.0;
      */
 
 contract EventTickets {
+  address payable public owner;
 
     /*
         Create a public state variable called owner.
@@ -21,6 +22,15 @@ contract EventTickets {
         The "buyers" field should keep track of addresses and how many tickets each buyer purchases.
     */
 
+    struct Event {
+      string description;
+      string website;
+      uint totalTickets;
+      uint sales;
+      mapping (address => uint) buyers;
+      bool isOpen;
+    }
+
     Event myEvent;
 
     /*
@@ -29,10 +39,14 @@ contract EventTickets {
         LogGetRefund should provide information about the refund requester and the number of tickets refunded.
         LogEndSale should provide infromation about the contract owner and the balance transferred to them.
     */
+    event LogBuyTickets(address purchaser, uint numTickets);
+    event LogGetRefund(address requester, uint numTickets);
+    event LogEndSale(address owner, uint amountTransferred);
 
     /*
         Create a modifier that throws an error if the msg.sender is not the owner.
     */
+    modifier verifyCaller (address _address) { require (msg.sender == _address); _;}
 
     /*
         Define a constructor.
@@ -40,6 +54,14 @@ contract EventTickets {
         Set the owner to the creator of the contract.
         Set the appropriate myEvent details.
     */
+    constructor(string memory description,string memory website, uint totalTickets) public {
+      owner = msg.sender;
+      myEvent.description = description;
+      myEvent.website = website;
+      myEvent.totalTickets = totalTickets;
+      myEvent.isOpen = true;
+      myEvent.sales = 0;
+    }
 
     /*
         Define a function called readEvent() that returns the event details.
@@ -47,10 +69,10 @@ contract EventTickets {
         The returned details should be called description, website, uint totalTickets, uint sales, bool isOpen in that order.
     */
     function readEvent()
-        public
+        public view
         returns(string memory description, string memory website, uint totalTickets, uint sales, bool isOpen)
     {
-
+        return (myEvent.description,myEvent.website,myEvent.totalTickets,myEvent.sales,myEvent.isOpen);
     }
 
     /*
@@ -58,6 +80,9 @@ contract EventTickets {
         This function takes 1 argument, an address and
         returns the number of tickets that address has purchased.
     */
+    function getBuyerTicketCount(address requester) public view returns(uint) {
+        return myEvent.buyers[requester];
+    }
 
     /*
         Define a function called buyTickets().
@@ -74,6 +99,15 @@ contract EventTickets {
             - refund any surplus value sent with the transaction
             - emit the appropriate event
     */
+    function buyTickets(uint ticketsToPurchase) public payable {
+      require(myEvent.isOpen);
+      require(msg.value >= ticketsToPurchase *  TICKET_PRICE);
+      require(myEvent.totalTickets - myEvent.sales > ticketsToPurchase);
+      myEvent.sales += ticketsToPurchase;
+      myEvent.buyers[msg.sender] = ticketsToPurchase;
+      msg.sender.transfer(msg.value - ticketsToPurchase *  TICKET_PRICE);
+      emit LogBuyTickets(msg.sender,ticketsToPurchase);
+    }
 
     /*
         Define a function called getRefund().
@@ -84,6 +118,13 @@ contract EventTickets {
             - Transfer the appropriate amount to the refund requester.
             - Emit the appropriate event.
     */
+    function getRefund() public payable {
+      require(myEvent.buyers[msg.sender]>0);
+      uint purchasedTickets = myEvent.buyers[msg.sender];
+      myEvent.sales -= purchasedTickets;
+      msg.sender.transfer(purchasedTickets * TICKET_PRICE);
+      emit LogGetRefund(msg.sender,purchasedTickets);
+    }
 
     /*
         Define a function called endSale().
@@ -94,4 +135,10 @@ contract EventTickets {
             - transfer the contract balance to the owner
             - emit the appropriate event
     */
+    function endSale() public payable verifyCaller(owner) {
+      myEvent.isOpen = false;
+      uint balance = address(this).balance;
+      owner.transfer(balance);
+      emit LogEndSale(owner,balance);
+    }
 }
